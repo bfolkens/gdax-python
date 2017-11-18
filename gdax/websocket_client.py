@@ -36,6 +36,10 @@ class WebsocketClient(object):
         self.api_passphrase = api_passphrase
         self.should_print = should_print
         self.mongo_collection = mongo_collection
+        self.reconnect_delay = 500
+        self.reconnect_exponential_backoff = True
+        self.reconnect_max_delay = 10000
+        self.reconnect_attempts = 0
 
     def start(self):
         if self.ws:
@@ -96,10 +100,24 @@ class WebsocketClient(object):
     def _disconnect(self, ws):
         self.on_close()
 
+    def reconnect(self):
+        if self.reconnect_exponential_backoff:
+            delay = self.reconnect_delay * 2 ** self.reconnect_attempts
+            if delay > self.reconnect_max_delay:
+                delay = self.reconnect_max_delay
+        else:
+            delay = self.reconnect_delay
+
+        time.sleep(delay / 1000.0)
+
+        self.reconnect_attempts += 1
+        self.start()
+
     def close(self):
         self.ws.close()
 
     def on_open(self):
+        self.reconnect_attempts = 0
         if self.should_print:
             print("-- Subscribed! --\n")
 
@@ -122,6 +140,7 @@ class WebsocketClient(object):
         traceback.print_tb(e.__traceback__)
         print(e)
 
+        self.reconnect()
 
 if __name__ == "__main__":
     import sys
